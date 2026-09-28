@@ -5,3 +5,8 @@
 
 # Virtual environment
 .venv/
+
+# Python and dashboard caches
+__pycache__/
+*.py[cod]
+data/.cache/
