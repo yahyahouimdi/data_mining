@@ -1,0 +1,7 @@
+
+# Data files
+*.mat
+*.csv
+
+# Virtual environment
+.venv/
