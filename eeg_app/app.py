@@ -17,7 +17,7 @@ from .src.io_utils import annotation_source_warning, discover_recordings, read_a
 from .src.plotting import duration_figures, seizure_timeline, signal_figure, target_figure, window_class_figure
 from .src.signal_utils import normalize_series, spectrogram, welch_psd
 from .src.target import build_target, class_distribution, segment_signal, validate_seizures
-from .src.ui import inject_css, metric_row
+from .src.ui import PLOTLY_CONFIG, inject_css, metric_row
 
 
 st.set_page_config(page_title="EEG Seizure Explorer", page_icon="🧠", layout="wide")
@@ -116,6 +116,7 @@ def _sidebar(records):
         selected_channels = channels[:1]
     duration = float(metadata["duration"])
     time_range = st.sidebar.slider("Plage temporelle (s)", 0.0, max(duration, 1.0), (0.0, max(duration, 1.0)), step=max(duration / 1000, 0.1))
+    st.sidebar.caption("Zoom graphique: molette, boutons +/-, glisser pour zoomer, double-clic pour réinitialiser.")
     window = st.sidebar.selectbox("Fenetre", [5, 10, 30, 60, "full"], format_func=lambda value: "Pleine duree" if value == "full" else f"{value} s")
     normalization = st.sidebar.selectbox("Normalisation", ["none", "z-score", "min-max"], format_func=lambda value: {"none": "Aucune", "z-score": "Z-score", "min-max": "Min-max"}[value])
     mode = st.sidebar.radio("Affichage", ["stacked", "overlay"], format_func=lambda value: "Canaux empiles" if value == "stacked" else "Canaux superposes")
@@ -184,7 +185,7 @@ def overview_tab(config: dict, seizures: pd.DataFrame) -> None:
     frame = cached_window(str(config["record"].signal_path), tuple(config["channels"]), *config["time_range"], config["cache_dir"])
     for channel in config["channels"]:
         frame[channel] = normalize_series(frame[channel], config["normalization"])
-    st.plotly_chart(signal_figure(frame, config["channels"], seizures if config["overlays"] else seizures.iloc[0:0], config["mode"], config["downsample"], "plotly_dark" if config["dark"] else "plotly_white"), use_container_width=True)
+    st.plotly_chart(signal_figure(frame, config["channels"], seizures if config["overlays"] else seizures.iloc[0:0], config["mode"], config["downsample"], "plotly_dark" if config["dark"] else "plotly_white"), use_container_width=True, config=PLOTLY_CONFIG)
     st.subheader("Vue multi-enregistrements")
     rows = [{"Enregistrement": item.recording_id, "d": item.signal_path is not None, "h": item.annotation_path is not None} for item in cached_recordings(config["folder"])]
     st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
@@ -221,11 +222,11 @@ def annotations_tab(config: dict, raw: pd.DataFrame, seizures: pd.DataFrame) -> 
     stats = duration_statistics(edited)
     metric_row([("Crises", str(int(stats["count"]))), ("Duree moyenne", f"{stats['mean']:.2f} s"), ("Min / max", f"{stats['min']:.2f} / {stats['max']:.2f} s"), ("Intervalle moyen", f"{stats['mean_interval']:.2f} s")])
     if not edited.empty:
-        st.plotly_chart(seizure_timeline(edited), use_container_width=True)
+        st.plotly_chart(seizure_timeline(edited), use_container_width=True, config=PLOTLY_CONFIG)
         bar, histogram = duration_figures(edited)
         left, right = st.columns(2)
-        left.plotly_chart(bar, use_container_width=True)
-        right.plotly_chart(histogram, use_container_width=True)
+        left.plotly_chart(bar, use_container_width=True, config=PLOTLY_CONFIG)
+        right.plotly_chart(histogram, use_container_width=True, config=PLOTLY_CONFIG)
         conclusion = "similaires" if stats["cv"] < 0.25 else "variables"
         st.info(f"Coefficient de variation: {stats['cv']:.3f}. Les durees sont {conclusion} (seuil CV < 0.25).")
         st.download_button("Exporter les crises CSV", edited.to_csv(index=False).encode("utf-8"), f"{config['record'].recording_id}_seizures.csv", "text/csv")
@@ -250,9 +251,9 @@ def target_tab(config: dict, seizures: pd.DataFrame) -> None:
     recording_time = max(0.0, range_end - range_start)
     metric_row([("Temps total des crises", f"{seizure_time:.2f} s"), ("Durée de l'enregistrement", f"{recording_time:.2f} s"), ("Temps en crise", f"{seizure_time / recording_time:.1%}" if recording_time else "0.0%")])
     donut = px.pie(names=["Hors crise", "Crise"], values=[distribution["class_0"], distribution["class_1"]], hole=0.58, color=["Hors crise", "Crise"], color_discrete_map={"Hors crise": "#0e7490", "Crise": "#d64550"}, title="Distribution de Class")
-    st.plotly_chart(donut, use_container_width=True)
+    st.plotly_chart(donut, use_container_width=True, config=PLOTLY_CONFIG)
     channel = st.selectbox("Canal cible", config["channels"])
-    st.plotly_chart(target_figure(frame, channel, validated), use_container_width=True)
+    st.plotly_chart(target_figure(frame, channel, validated), use_container_width=True, config=PLOTLY_CONFIG)
     export_columns = ["Time", *config["channels"], "Class"]
     export_frame = frame[export_columns]
     st.download_button("Télécharger le dataset échantillon par échantillon - CSV", export_frame.to_csv(index=False).encode("utf-8"), f"{config['record'].recording_id}_sample_dataset.csv", "text/csv")
@@ -288,7 +289,7 @@ def segmentation_tab(config: dict, seizures: pd.DataFrame) -> None:
     if windows.empty:
         st.info("La plage sélectionnée est trop courte pour créer une fenêtre complète.")
         return
-    st.plotly_chart(window_class_figure(windows), use_container_width=True)
+    st.plotly_chart(window_class_figure(windows), use_container_width=True, config=PLOTLY_CONFIG)
     st.dataframe(windows, use_container_width=True, hide_index=True)
     st.download_button("Télécharger fenêtres CSV", windows.to_csv(index=False).encode("utf-8"), f"{config['record'].recording_id}_windows.csv", "text/csv")
     window_buffer = io.BytesIO()
@@ -320,11 +321,11 @@ def features_tab(config: dict, seizures: pd.DataFrame) -> None:
     feature_name = st.selectbox("Caractéristique temporelle", list(FEATURE_NAMES), format_func=lambda value: {"Mean": "Moyenne", "Std": "Écart-type", "Variance": "Variance", "Min": "Minimum", "Max": "Maximum", "Amplitude": "Amplitude", "RMS": "RMS", "Energy": "Énergie"}[value], key="feature_name")
     selected_column = f"{feature_channel}_{feature_name}"
     box = px.box(features, x="Class", y=selected_column, color="Class", points=False, color_discrete_map={0: "#0e7490", 1: "#d64550"}, labels={"Class": "Classe", selected_column: feature_name}, title=f"{feature_name} par classe - {feature_channel}")
-    st.plotly_chart(box, use_container_width=True)
+    st.plotly_chart(box, use_container_width=True, config=PLOTLY_CONFIG)
     rms_column = f"{feature_channel}_RMS"
     energy_column = f"{feature_channel}_Energy"
     scatter = px.scatter(features, x=rms_column, y=energy_column, color="Class", color_discrete_map={0: "#0e7490", 1: "#d64550"}, labels={rms_column: "RMS", energy_column: "Énergie"}, title=f"RMS vs Énergie - {feature_channel}")
-    st.plotly_chart(scatter, use_container_width=True)
+    st.plotly_chart(scatter, use_container_width=True, config=PLOTLY_CONFIG)
     st.download_button("Télécharger caractéristiques CSV", features.to_csv(index=False).encode("utf-8"), f"{config['record'].recording_id}_features.csv", "text/csv")
     feature_buffer = io.BytesIO()
     features.to_parquet(feature_buffer, index=False)
@@ -338,10 +339,10 @@ def comparison_tab(config: dict, seizures: pd.DataFrame) -> None:
     fs = config["metadata"]["frequency"]
     frequencies, power = welch_psd(frame[channel].to_numpy(), fs)
     if len(frequencies):
-        st.plotly_chart(px.line(x=frequencies, y=power, labels={"x": "Frequence (Hz)", "y": "Puissance"}, title="Welch PSD"), use_container_width=True)
+        st.plotly_chart(px.line(x=frequencies, y=power, labels={"x": "Frequence (Hz)", "y": "Puissance"}, title="Welch PSD"), use_container_width=True, config=PLOTLY_CONFIG)
     frequencies, times, values = spectrogram(frame[channel].to_numpy(), fs)
     if values.size:
-        st.plotly_chart(px.imshow(10 * np.log10(values + 1e-12), x=times, y=frequencies, aspect="auto", labels={"x": "Temps (s)", "y": "Frequence (Hz)"}, title="Spectrogramme"), use_container_width=True)
+        st.plotly_chart(px.imshow(10 * np.log10(values + 1e-12), x=times, y=frequencies, aspect="auto", labels={"x": "Temps (s)", "y": "Frequence (Hz)"}, title="Spectrogramme"), use_container_width=True, config=PLOTLY_CONFIG)
     st.caption("La bande autour de 3 Hz est souvent informative pour les pointes-ondes des absences; interpretez-la avec les annotations valides.")
 
 

@@ -5,6 +5,15 @@ from __future__ import annotations
 import streamlit as st
 
 
+PLOTLY_CONFIG = {
+    "scrollZoom": True,
+    "displaylogo": False,
+    "doubleClick": "reset",
+    "modeBarButtonsToAdd": ["zoomIn2d", "zoomOut2d", "autoScale2d", "resetScale2d"],
+    "modeBarButtonsToRemove": ["lasso2d", "select2d"],
+}
+
+
 def inject_css(dark: bool = False) -> None:
     """Apply the dashboard visual system."""
     background = "#101b26" if dark else "#f5f8fa"
