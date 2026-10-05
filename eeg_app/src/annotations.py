@@ -4,15 +4,107 @@ from __future__ import annotations
 
 import re
 import unicodedata
+from datetime import datetime, time
 from typing import Iterable
 
 import numpy as np
 import pandas as pd
 
 
+SECONDS_PER_DAY = 86400.0
+
+
+def excel_time_to_seconds(value: object) -> float:
+    """Convert an Excel fractional-day or time value to seconds since midnight."""
+    if value is None or pd.isna(value):
+        return float("nan")
+    if isinstance(value, pd.Timestamp):
+        return float(value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000)
+    if isinstance(value, datetime):
+        return float(value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000)
+    if isinstance(value, time):
+        return float(value.hour * 3600 + value.minute * 60 + value.second + value.microsecond / 1_000_000)
+    numeric = float(value)
+    return (numeric * SECONDS_PER_DAY) % SECONDS_PER_DAY
+
+
+def annotation_time_to_signal_seconds(annotation_time: object, trace_start: object) -> float:
+    """Convert an absolute Excel clock time to elapsed seconds from trace start."""
+    annotation_seconds = excel_time_to_seconds(annotation_time)
+    trace_seconds = excel_time_to_seconds(trace_start)
+    if not np.isfinite(annotation_seconds) or not np.isfinite(trace_seconds):
+        return float("nan")
+    return (annotation_seconds - trace_seconds) % SECONDS_PER_DAY
+
+
+def normalize_recording_id(value: object) -> str:
+    """Normalize recording ids such as ``190304A-E`` and ``190304A_E``."""
+    text = "" if value is None or pd.isna(value) else str(value).strip().upper()
+    return re.sub(r"[^A-Z0-9]", "", text)
+
+
+def format_excel_clock(value: object) -> str:
+    """Format an Excel clock value as a readable HH:MM:SS string."""
+    seconds = excel_time_to_seconds(value)
+    if not np.isfinite(seconds):
+        return ""
+    whole_seconds = int(round(seconds)) % int(SECONDS_PER_DAY)
+    return f"{whole_seconds // 3600:02d}:{whole_seconds % 3600 // 60:02d}:{whole_seconds % 60:02d}"
+
+
+def excel_seizures_for_recording(excel: pd.DataFrame, recording_id: str, recording_duration: float | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Extract one recording's Excel seizure intervals in CSV elapsed seconds.
+
+    The returned validation table retains the original clock examples and a
+    status column. Intervals outside the signal duration are reported but are
+    excluded from the intervals used for targets and red overlays.
+    """
+    columns = {str(column).strip().casefold(): column for column in excel.columns}
+    id_column = columns.get("unnamed: 0")
+    trace_column = columns.get("debuttrace")
+    empty = pd.DataFrame(columns=["Crise", "Début (s)", "Fin (s)", "Durée (s)"])
+    validation_columns = ["Crise", "Début du tracé", "Excel début", "Excel fin", "Début (s)", "Fin (s)", "Durée (s)", "Statut"]
+    if id_column is None or trace_column is None:
+        return empty, pd.DataFrame(columns=validation_columns)
+    matches = excel.loc[excel[id_column].map(normalize_recording_id).eq(normalize_recording_id(recording_id))]
+    if matches.empty:
+        return empty, pd.DataFrame(columns=validation_columns)
+    row = matches.iloc[0]
+    pairs: list[tuple[int, object, object]] = []
+    for column in excel.columns:
+        match = re.match(r"^(?:deb|debut|debt)ce(\d+)$", str(column).strip(), re.IGNORECASE)
+        if not match:
+            continue
+        number = int(match.group(1))
+        end_column = next((candidate for candidate in excel.columns if str(candidate).strip().casefold() == f"fince{number}"), None)
+        if end_column is not None:
+            pairs.append((number, row[column], row[end_column]))
+    intervals: list[dict[str, object]] = []
+    debug_rows: list[dict[str, object]] = []
+    for number, start_value, end_value in sorted(pairs):
+        if pd.isna(start_value) or pd.isna(end_value):
+            continue
+        start = annotation_time_to_signal_seconds(start_value, row[trace_column])
+        end = annotation_time_to_signal_seconds(end_value, row[trace_column])
+        duration = end - start
+        if duration < 0:
+            end += SECONDS_PER_DAY
+            duration = end - start
+        status = "Valide"
+        valid = np.isfinite(start) and np.isfinite(end) and start >= 0 and end >= start
+        if recording_duration is not None and valid and (start > recording_duration or end > recording_duration):
+            status = "Hors durée du signal"
+            valid = False
+        debug_rows.append({"Crise": f"Crise {number}", "Début du tracé": format_excel_clock(row[trace_column]), "Excel début": format_excel_clock(start_value), "Excel fin": format_excel_clock(end_value), "Début (s)": start, "Fin (s)": end, "Durée (s)": duration, "Statut": status})
+        if valid:
+            intervals.append({"Crise": f"Crise {number}", "Début (s)": start, "Fin (s)": end, "Durée (s)": duration})
+    return normalize_seizure_table(pd.DataFrame(intervals)), pd.DataFrame(debug_rows, columns=validation_columns)
+
+
 def clean_label(value: object) -> str:
     """Repair common mojibake and whitespace in annotation labels."""
     text = "" if pd.isna(value) else str(value).strip()
+    text = text.replace("ï¿½ï¿½", "é").replace("ï¿½", "é").replace("��", "é").replace("�", "é")
     for _ in range(2):
         try:
             repaired = text.encode("latin1").decode("utf-8")
