@@ -5,6 +5,11 @@
 This project provides the exploration and annotation part of a Data Mining lab
 about automatic detection of absence seizures from EEG recordings.
 
+All explanatory time examples in this document use milliseconds (ms). For
+example, one sample at 256 Hz is approximately `3.90625 ms`. The source CSV
+timestamps remain in seconds internally so sampling, interval matching, and
+Plotly synchronization stay numerically correct.
+
 The implemented workflow is:
 
 ```text
@@ -68,6 +73,16 @@ classification can be added after the target-generation stage.
 - Explicit warning that `h` file times are row-index times and that their
 	durations are not reliable.
 - Automatic pairing of configurable absence start/end labels.
+- Automatic pairing of the `YO` start and `YF` end markers used by the supplied
+	annotation files, so seizure intervals are populated on first load.
+- Automatically extracted `YO`/`YF` intervals are provisional because the
+	`h`-file `Time` column is an annotation-row index, not a trustworthy event
+	clock. They remain editable and are shown with the existing warning until
+	corrected or replaced with authoritative Excel intervals.
+- When `data/Annotations.xlsx` is available, it is authoritative. The selected
+	recording is matched by normalized `Unnamed: 0` ID, `DebutTrace` is used as
+	the trace clock origin, and every `DebCEi`/`FinCEi` pair is converted from
+	Excel fractional-day time to elapsed CSV seconds.
 - Editable seizure table with:
 	- crisis name;
 	- start time;
@@ -91,7 +106,25 @@ classification can be added after the target-generation stage.
 - Total seizure time and class-imbalance warning.
 - Export of labeled data as CSV or Parquet.
 
-### Part IV: Comparaison
+### Part IV: Segmentation
+
+- Configurable windows of 1000, 2000, 5000, 10000, 30000 ms, or a custom duration.
+- Configurable overlap of 0%, 25%, 50%, or 75%.
+- Sampling-rate-derived samples per window and step size.
+- Window-level `Seizure_Ratio` and class assignment at the 50% threshold.
+- Window table, class timeline, CSV export, and Parquet export.
+
+### Part V: Extraction des caractéristiques
+
+- Raw-sample temporal features per EEG channel: Mean, Std, Variance, Min, Max,
+	Amplitude, RMS, and Energy.
+- Class distribution metrics, feature preview, class box plot, and RMS/Energy
+	scatter plot.
+- Channel-qualified feature names prevent collisions when several EEG channels
+	are selected.
+- CSV and Parquet feature-dataset exports.
+
+### Comparison
 
 - Channel selection for spectral analysis.
 - Welch power spectral density plot.
@@ -99,7 +132,7 @@ classification can be added after the target-generation stage.
 - Guidance to inspect the approximately 3 Hz spike-and-wave pattern commonly
 	associated with absence seizures.
 
-### Part V: Aide
+### Aide
 
 - Short explanations of each application tab.
 - Explanation of the `d` signal files and `h` annotation files.
@@ -144,12 +177,13 @@ eeg_app/
 		channels.py                Dynamic channel grouping, layouts, and units
 		annotations.py             Cleaning, pairing, editing, and statistics
 		target.py                  Binary target construction
+		features.py                Window-level temporal feature extraction
 		signal_utils.py            Sampling, normalization, decimation, spectra
 		plotting.py                Plotly signal, seizure, target, and duration plots
 		ui.py                      CSS injection and reusable metric cards
 
 tests/
-	test_core.py                 Four focused unit tests
+	test_core.py                 Nine focused unit tests
 
 data/
 	*_0000d.csv                  Signal recordings
@@ -234,7 +268,7 @@ The implementation was checked with the following commands:
 The unit test result was:
 
 ```text
-4 passed
+11 passed
 ```
 
 The tests cover:
@@ -244,8 +278,133 @@ The tests cover:
 - seizure duration statistics;
 - binary target construction.
 
+The timing-specific tests also cover Excel clock conversion, normalized
+recording-ID matching, and the `190304A-E` example interval.
+
 The Streamlit server was also started successfully in headless mode and
 verified to serve the application locally.
+
+## Timing alignment contract
+
+The CSV `Time` column is the master signal axis. It contains elapsed seconds
+from the beginning of the EEG trace. The application measures the sampling
+frequency from the median positive time step instead of assuming 256 Hz.
+
+`Annotations.xlsx` stores clock times as Excel fractional days. For each
+selected recording, the application performs:
+
+```python
+relative_seconds = (excel_event_time - DebutTrace) * 86400
+```
+
+The converted intervals are validated against the measured CSV duration before
+they are used for red overlays, `Class`, segmentation, or features. The
+**Verification de la synchronisation** expander shows the original clock
+values, converted elapsed seconds, signal duration, sampling frequency, and
+validation status.
+
+For the real `190304A-E` workbook row, the verified conversion is:
+
+```text
+Trace start: 10:13:35
+Excel seizure: 10:35:06 -> 10:35:13
+CSV interval:  1291.0 s -> 1298.0 s
+Duration:      7.0 s
+```
+
+When the workbook does not contain the selected recording, the app falls back
+to editable provisional `h`-file YO/YF intervals and keeps the warning visible.
+
+## Partie III - Variable cible
+
+The validated seizure table is clipped to the recording duration, sorted, and
+merged when intervals overlap. The sample-level dataset uses closed intervals:
+
+```text
+Class = 1 when Début crise <= Time <= Fin crise
+Class = 0 otherwise
+```
+
+Class construction uses sorted timestamp search boundaries and a NumPy
+difference array rather than a Python loop over every sample. The interface
+shows the number and percentage of samples in each class, a donut chart, the
+imbalance ratio, total seizure time, recording duration, and seizure-time
+percentage. A minority class below 20% produces a visible warning; the
+threshold is defined in the Part III implementation and can be changed easily.
+
+The signal and Class plots share their time axis. Valid seizure periods are
+drawn as translucent red background regions from their start to their end in
+both the signal panel and the target panel.
+
+## Partie IV - Segmentation
+
+Segmentation transforms the raw sample-level dataset into overlapping temporal
+windows. The default configuration is:
+
+```text
+Window duration: 2000 ms
+Overlap: 50%
+At 256 Hz: 512 samples per window and 256 samples per step
+```
+
+The application calculates these values from the measured sampling frequency:
+
+```python
+samples_per_window = round(window_duration * sampling_frequency)
+step_samples = round(samples_per_window * (1 - overlap))
+```
+
+Available window durations are 1000, 2000, 5000, 10000, and 30000 ms, with a
+custom duration option. Available overlaps are 0%, 25%, 50%, and 75%.
+
+Each window contains:
+
+```text
+Window, Start_Time, End_Time, Duration, Seizure_Ratio, Class
+```
+
+The window class rule is:
+
+```text
+Seizure_Ratio = mean(sample-level Class)
+Window Class = 1 when Seizure_Ratio >= 0.50
+Window Class = 0 otherwise
+```
+
+The window table, class counts, percentages, class timeline, CSV, and Parquet
+exports are available in **Partie IV - Segmentation**.
+
+## Partie V - Extraction des caractéristiques
+
+Part V calculates temporal features from the original raw samples in each
+window. It never uses the visually downsampled signal. For every selected EEG
+channel, the following eight features are calculated:
+
+- **Mean**: arithmetic mean;
+- **Std**: standard deviation;
+- **Variance**: variance;
+- **Min**: minimum value;
+- **Max**: maximum value;
+- **Amplitude**: `Max - Min`;
+- **RMS**: `sqrt(mean(window ** 2))`;
+- **Energy**: `sum(window ** 2)`.
+
+NaN and infinite values are removed safely before calculation. Empty windows
+return zero-valued features, and constant signals remain valid with zero
+standard deviation and variance.
+
+Feature names are qualified by channel so multiple EEG channels never
+overwrite one another, for example:
+
+```text
+EEGFp1_Mean, EEGFp1_Std, EEGFp1_Variance, EEGFp1_Amplitude,
+EEGFp1_RMS, EEGFp1_Energy, EEGFp2_Mean, EEGFp2_Std, ... , Class
+```
+
+The feature tab reports total windows, class 0/class 1 counts and percentages,
+shows the first 100 feature rows, provides class distribution box plots and an
+RMS-versus-Energy scatter plot, and exports the feature dataset as CSV or
+Parquet. This dataset is the starting point for the future classifier stage.
 
 ## Requirement checklist
 
@@ -265,4 +424,6 @@ verified to serve the application locally.
 - [x] CSV and Parquet exports.
 - [x] Welch PSD and spectrogram comparison.
 - [x] Help tab and responsive visual styling.
-- [x] Four focused unit tests.
+- [x] Complete Parts III, IV, and V pipeline.
+- [x] Red seizure overlays clipped to the visible signal time range.
+- [x] Eight focused unit tests covering the full pure-data pipeline.
