@@ -17,6 +17,7 @@ def inject_css(dark: bool = False) -> None:
     .app-header h1 {{ color: #0e7490; margin: 0; letter-spacing: 0; }}
     .status {{ color: #667085; font-size: .9rem; }}
     .warning-badge {{ display: inline-block; padding: .25rem .6rem; border-radius: 999px; background: #fff0c2; color: #805b00; font-size: .8rem; font-weight: 600; }}
+    .pipeline {{ background: {surface}; border-left: 4px solid #0e7490; border-radius: 10px; padding: .8rem 1rem; margin: .5rem 0 1rem; color: {text}; line-height: 1.8; }}
     </style>""", unsafe_allow_html=True)
 
 
