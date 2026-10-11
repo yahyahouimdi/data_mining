@@ -482,10 +482,6 @@ def window_features_tab(config: dict, seizures: pd.DataFrame) -> None:
     if split_frame is not None:
         st.info(f"Split par {split_group}: aucun groupe n'est partagé entre train, validation et test. Appliquez le balancing uniquement au train; les fenêtres adjacentes restent corrélées.")
         st.dataframe(split_frame.groupby("split").size().rename("windows").reset_index(), hide_index=True)
-        for split_name in ("train", "validation", "test"):
-            split_part = split_frame.loc[split_frame["split"].eq(split_name)]
-            if not split_part.empty:
-                _download_dataset(split_part, f"eeg_features_{split_name}")
     st.subheader("Visualisations et inspection")
     plot_left, plot_right = st.columns(2)
     plot_left.plotly_chart(px.histogram(dataset, x="label", color="label", title="Distribution avant balancing"), use_container_width=True, config=PLOTLY_CONFIG)
@@ -507,17 +503,19 @@ def window_features_tab(config: dict, seizures: pd.DataFrame) -> None:
     st.plotly_chart(inspection_fig, use_container_width=True, config=PLOTLY_CONFIG)
     st.plotly_chart(px.bar(dataset.groupby("recording_id").size().rename("windows").reset_index(), x="recording_id", y="windows", title="Fenêtres par enregistrement"), use_container_width=True, config=PLOTLY_CONFIG)
     st.subheader("Exports")
-    _download_dataset(dataset, "eeg_features_all_patients" if scope == "Tous les enregistrements" else f"eeg_features_patient_{config['record'].recording_id}")
-    if balanced is not None:
-        _download_dataset(balanced, "eeg_features_balanced")
-    x, y = split_xy(dataset)
-    _download_dataset(x, "eeg_features_X")
-    _download_dataset(y.to_frame(), "eeg_features_y")
-    compact_columns = ["patient_id", "window_id", *feature_names, "label"]
-    _download_dataset(dataset[compact_columns], "eeg_features_compact")
-    export_recording = st.selectbox("Exporter un enregistrement", sorted(dataset["recording_id"].unique()))
-    recording_dataset = dataset.loc[dataset["recording_id"].eq(export_recording)]
-    _download_dataset(recording_dataset, f"eeg_features_recording_{export_recording}")
+    whole_name = "eeg_features_all_patients" if scope == "Tous les enregistrements" else f"eeg_features_{config['record'].recording_id}"
+    export_columns = st.columns(2)
+    with export_columns[0]:
+        st.markdown("**Whole dataset**")
+        st.caption("Complete unbalanced feature dataset")
+        _download_dataset(dataset, whole_name)
+    with export_columns[1]:
+        st.markdown("**Balanced dataset**")
+        if balanced is None:
+            st.caption("Apply balancing above to enable this export.")
+        else:
+            st.caption("Dataset after the selected balancing method")
+            _download_dataset(balanced, "eeg_features_balanced")
 
 
 def comparison_tab(config: dict, seizures: pd.DataFrame) -> None:
