@@ -12,7 +12,7 @@ import streamlit as st
 
 from .src.annotations import duration_statistics, excel_seizures_for_recording, normalize_recording_id, normalize_seizure_table, pair_seizures
 from .src.channels import channel_type, group_channels, layout_name
-from .src.dataset import DATASET_METADATA, balance_dataset, build_recording_dataset, detect_signal_channels, export_dataset, feature_columns, group_split, patient_id_for_recording, split_xy
+from .src.dataset import DATASET_METADATA, balance_dataset, build_recording_dataset, detect_signal_channels, feature_columns, group_split, patient_id_for_recording, split_xy
 from .src.features import FEATURE_NAMES, build_feature_dataset
 from .src.io_utils import annotation_source_warning, discover_recordings, read_annotations, read_csv_with_fallback, read_signal_window, signal_columns, signal_metadata
 from .src.plotting import duration_figures, seizure_timeline, signal_figure, target_figure, window_class_figure
@@ -516,6 +516,35 @@ def window_features_tab(config: dict, seizures: pd.DataFrame) -> None:
         else:
             st.caption("Dataset after the selected balancing method")
             _download_dataset(balanced, "eeg_features_balanced")
+    st.markdown("**Train / validation / test datasets**")
+    st.caption("Group-isolated files for machine-learning evaluation. Generate the split above first.")
+    if split_frame is None:
+        st.info("Create a train / validation / test split above to enable these exports.")
+    else:
+        split_columns = st.columns(3)
+        for column, split_name in zip(split_columns, ("train", "validation", "test")):
+            split_part = split_frame.loc[split_frame["split"].eq(split_name)]
+            with column:
+                st.markdown(f"**{split_name.title()} dataset**")
+                if split_part.empty:
+                    st.caption("No windows in this split.")
+                else:
+                    _download_dataset(split_part, f"eeg_features_{split_name}")
+    st.markdown("**Feature matrix X**")
+    st.caption("Only predictive feature columns; identifiers and label are excluded.")
+    x, y = split_xy(dataset)
+    _download_dataset(x, "eeg_features_X")
+    st.markdown("**Target vector y**")
+    st.caption("The binary target label for each window.")
+    _download_dataset(y.to_frame(), "eeg_features_y")
+    st.markdown("**Compact dataset**")
+    st.caption("Patient ID, window ID, all features, and label; timing and recording metadata are excluded.")
+    compact_columns = ["patient_id", "window_id", *feature_names, "label"]
+    _download_dataset(dataset[compact_columns], "eeg_features_compact")
+    st.markdown("**Individual recording dataset**")
+    export_recording = st.selectbox("Choose recording", sorted(dataset["recording_id"].unique()), key="export_recording")
+    recording_dataset = dataset.loc[dataset["recording_id"].eq(export_recording)]
+    _download_dataset(recording_dataset, f"eeg_features_recording_{export_recording}")
 
 
 def comparison_tab(config: dict, seizures: pd.DataFrame) -> None:

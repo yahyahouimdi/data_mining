@@ -172,14 +172,10 @@ windows are correlated. For model evaluation, create the group split first,
 then balance only the training partition. Validation and test partitions must
 remain unbalanced and untouched.
 
-The tab exports only the two primary datasets: the complete unbalanced feature
-dataset and, after balancing is applied, the balanced feature dataset. Each is
-available as CSV or Parquet without a DataFrame index. It also previews class
-distributions, feature box plots, per-patient counts, and an original-signal
-window inspection plot.
-`X`, `y`, per-split files, and per-recording data in CSV or Parquet without a
-DataFrame index. It also previews class distributions, feature box plots,
-per-patient counts, and an original-signal window inspection plot.
+The export area is organized with a title for every dataset type: complete
+unbalanced data, balanced data, train/validation/test splits, feature matrix
+`X`, target vector `y`, compact data, and an individual recording dataset.
+Each export is available as CSV or Parquet without a DataFrame index.
 
 ### Comparison
 
