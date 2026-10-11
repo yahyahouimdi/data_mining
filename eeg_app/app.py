@@ -12,6 +12,7 @@ import streamlit as st
 
 from .src.annotations import duration_statistics, excel_seizures_for_recording, normalize_recording_id, normalize_seizure_table, pair_seizures
 from .src.channels import channel_type, group_channels, layout_name
+from .src.dataset import DATASET_METADATA, balance_dataset, build_recording_dataset, detect_signal_channels, export_dataset, feature_columns, group_split, patient_id_for_recording, split_xy
 from .src.features import FEATURE_NAMES, build_feature_dataset
 from .src.io_utils import annotation_source_warning, discover_recordings, read_annotations, read_csv_with_fallback, read_signal_window, signal_columns, signal_metadata
 from .src.plotting import duration_figures, seizure_timeline, signal_figure, target_figure, window_class_figure
@@ -61,6 +62,15 @@ def cached_feature_dataset(path: str, channels: tuple[str, ...], start: float, e
 def cached_excel(path: str) -> pd.DataFrame:
     """Cache the small workbook used as the authoritative seizure source."""
     return pd.read_excel(path)
+
+
+@st.cache_data(show_spinner=False)
+def cached_dataset_record(path: str, source_mtime: float, patient_id: str, recording_id: str, channels: tuple[str, ...], seizure_signature: tuple[tuple[float, float], ...], window_duration: float, overlap: float, threshold: float) -> pd.DataFrame:
+    """Cache one raw recording's full-resolution feature extraction."""
+    del source_mtime
+    signal = read_csv_with_fallback(path, usecols=["Time", *channels])
+    seizures = pd.DataFrame(seizure_signature, columns=["Début (s)", "Fin (s)"])
+    return build_recording_dataset(signal, patient_id, recording_id, channels, seizures, window_duration=window_duration, overlap=overlap, label_threshold=threshold)
 
 
 def _format_duration(seconds: float) -> str:
@@ -332,6 +342,184 @@ def features_tab(config: dict, seizures: pd.DataFrame) -> None:
     st.download_button("Télécharger caractéristiques Parquet", feature_buffer.getvalue(), f"{config['record'].recording_id}_features.parquet", "application/octet-stream")
 
 
+def _dataset_annotations(config: dict, record, workbook: pd.DataFrame | None, allow_provisional: bool) -> tuple[pd.DataFrame, list[str]]:
+    """Resolve authoritative Excel intervals, or explicitly opt into h labels."""
+    warnings: list[str] = []
+    if workbook is not None:
+        seizures, validation = excel_seizures_for_recording(workbook, record.recording_id, config["metadata"]["duration"])
+        if not validation.empty and (validation["Statut"] != "Valide").any():
+            warnings.append(f"{record.recording_id}: certains intervalles Excel sont invalides ou hors durée.")
+        if not seizures.empty:
+            return validate_seizures(seizures, config["metadata"]["duration"]), warnings
+        warnings.append(f"{record.recording_id}: aucune annotation Excel valide.")
+    if allow_provisional and record.annotation_path:
+        try:
+            provisional = pair_seizures(read_annotations(record.annotation_path), labels=["absence", "yo", "yf"])
+            if not provisional.empty:
+                warnings.append(f"{record.recording_id}: labels h provisoires utilisés explicitement.")
+                return validate_seizures(provisional, config["metadata"]["duration"]), warnings
+        except (OSError, ValueError) as error:
+            warnings.append(f"{record.recording_id}: annotation h illisible ({error}).")
+    return pd.DataFrame(columns=["Crise", "Début (s)", "Fin (s)", "Durée (s)" ]), warnings
+
+
+def _download_dataset(frame: pd.DataFrame, stem: str) -> None:
+    """Render consistent CSV and optional Parquet downloads."""
+    st.download_button("Exporter CSV", frame.to_csv(index=False).encode("utf-8"), f"{stem}.csv", "text/csv", key=f"csv_{stem}")
+    try:
+        buffer = io.BytesIO()
+        frame.to_parquet(buffer, index=False)
+        st.download_button("Exporter Parquet", buffer.getvalue(), f"{stem}.parquet", "application/octet-stream", key=f"parquet_{stem}")
+    except (ImportError, ValueError):
+        st.caption("Parquet indisponible: installez pyarrow.")
+
+
+def window_features_tab(config: dict, seizures: pd.DataFrame) -> None:
+    """Generate, balance, inspect, split, and export the supervised ML dataset."""
+    st.subheader("Window Features & Dataset")
+    st.caption("Fenêtres complètes de 2 s, numérotées à partir de 1, calculées sur les échantillons bruts.")
+    records = cached_recordings(config["folder"])
+    scope = st.radio("Portée", ["Enregistrement sélectionné", "Tous les enregistrements"], horizontal=True, key="dataset_scope")
+    source_records = [config["record"]] if scope == "Enregistrement sélectionné" else records
+    all_channels = detect_signal_channels(config["metadata"]["columns"])
+    eeg_defaults = [channel for channel in all_channels if channel_type(channel) == "EEG"]
+    channels = st.multiselect("Canaux", all_channels, default=eeg_defaults, key="dataset_channels")
+    left, middle, right = st.columns(3)
+    window_duration = left.number_input("Durée fenêtre (s)", min_value=0.1, value=2.0, step=0.1, key="dataset_duration")
+    overlap = middle.slider("Recouvrement", 0.0, 0.95, 0.50, 0.05, key="dataset_overlap")
+    threshold = right.slider("Seuil de recouvrement crise", 0.0, 1.0, 0.50, 0.05, key="dataset_threshold")
+    workbook = st.session_state.get("xlsx_data")
+    default_workbook = Path(config["folder"]) / "Annotations.xlsx"
+    if workbook is None and default_workbook.exists():
+        try:
+            workbook = cached_excel(str(default_workbook))
+        except (OSError, ValueError, ImportError) as error:
+            st.warning(f"Annotations.xlsx n'a pas pu être lu: {error}")
+    allow_provisional = st.checkbox("Autoriser les annotations h provisoires si Excel manque", value=False)
+    if workbook is None and not allow_provisional:
+        st.warning("Aucune annotation Excel validée n'est disponible. Les enregistrements seront exclus; importez Annotations.xlsx ou activez explicitement les labels h provisoires.")
+    if not channels:
+        st.warning("Sélectionnez au moins un canal.")
+        return
+    generate = st.button("Générer / actualiser le dataset", type="primary", use_container_width=True)
+    if generate:
+        frames: list[pd.DataFrame] = []
+        warning_messages: list[str] = []
+        progress = st.progress(0.0)
+        for index, record in enumerate(source_records):
+            if record.signal_path is None:
+                warning_messages.append(f"{record.recording_id}: signal d manquant.")
+                continue
+            record_config = {**config, "record": record}
+            if record is not config["record"]:
+                try:
+                    record_config["metadata"] = cached_metadata(str(record.signal_path), config["cache_dir"])
+                except (OSError, ValueError) as error:
+                    warning_messages.append(f"{record.recording_id}: métadonnées invalides ({error}).")
+                    continue
+            record_seizures, annotation_warnings = _dataset_annotations(record_config, record, workbook, allow_provisional)
+            warning_messages.extend(annotation_warnings)
+            if record_seizures.empty:
+                warning_messages.append(f"{record.recording_id}: exclu du dataset supervisé faute d'intervalle valide.")
+                continue
+            selected = [channel for channel in channels if channel in record_config["metadata"]["columns"]]
+            try:
+                signature = _seizure_signature(record_seizures, float(record_config["metadata"]["duration"]))
+                frames.append(cached_dataset_record(str(record.signal_path), record.signal_path.stat().st_mtime, patient_id_for_recording(record.recording_id), record.recording_id, tuple(selected), signature, float(window_duration), float(overlap), float(threshold)))
+            except (OSError, ValueError, KeyError) as error:
+                warning_messages.append(f"{record.recording_id}: dataset impossible ({error}).")
+            progress.progress((index + 1) / max(1, len(source_records)))
+        dataset = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=[*DATASET_METADATA, *feature_columns(channels), "label"])
+        st.session_state.dataset_feature_channels = tuple(channels)
+        st.session_state.window_dataset = dataset
+        st.session_state.window_dataset_warnings = warning_messages
+        st.session_state.balanced_dataset = None
+    dataset = st.session_state.get("window_dataset")
+    if dataset is None:
+        st.info("Configurez les paramètres puis lancez la génération.")
+        return
+    for warning in st.session_state.get("window_dataset_warnings", []):
+        st.warning(warning)
+    if dataset.empty:
+        st.error("Aucune fenêtre supervisée n'a été générée.")
+        return
+    distribution = class_distribution(dataset["label"])
+    metric_row([("Fenêtres", f"{len(dataset):,}"), ("Features", f"{len(dataset.columns) - 6:,}"), ("Classe 0", f"{distribution['class_0']:,} ({distribution['percentage_0']:.1%})"), ("Classe 1", f"{distribution['class_1']:,} ({distribution['percentage_1']:.1%})"), ("Patients / enregistrements", f"{dataset['patient_id'].nunique()} / {dataset['recording_id'].nunique()}")])
+    st.dataframe(dataset.head(100), use_container_width=True, hide_index=True)
+    st.subheader("Balance Dataset")
+    balance_method = st.selectbox("Méthode", ["none", "undersample", "oversample", "hybrid"], format_func=lambda value: {"none": "Aucune", "undersample": "Random undersampling", "oversample": "Random oversampling", "hybrid": "Hybrid sampling"}[value])
+    balance_scope = st.selectbox("Portée du balancing", ["Global", "Par patient"])
+    seed = int(st.number_input("Seed", min_value=0, value=42, step=1))
+    default_target = max(1, min(distribution["class_0"], distribution["class_1"]))
+    target_count = int(st.number_input("Fenêtres par classe (hybrid/optionnel)", min_value=1, value=default_target, step=1))
+    if st.button("Appliquer le balancing", key="apply_balance"):
+        if balance_scope == "Global":
+            balanced, report = balance_dataset(dataset, balance_method, target_per_class=target_count, seed=seed)
+            st.session_state.balanced_dataset = balanced
+            st.session_state.balance_report = report
+        else:
+            parts: list[pd.DataFrame] = []
+            for patient, group in dataset.groupby("patient_id", sort=False):
+                if group["label"].nunique() < 2:
+                    st.warning(f"Patient {patient}: une seule classe, balancing ignoré.")
+                    parts.append(group)
+                else:
+                    parts.append(balance_dataset(group, balance_method, target_per_class=target_count, seed=seed)[0])
+            st.session_state.balanced_dataset = pd.concat(parts, ignore_index=True)
+    balanced = st.session_state.get("balanced_dataset")
+    if balanced is not None:
+        balanced_distribution = class_distribution(balanced["label"])
+        report = st.session_state.get("balance_report")
+        metric_row([("Final classe 0", str(balanced_distribution["class_0"])), ("Final classe 1", str(balanced_distribution["class_1"])), ("Taille finale", f"{len(balanced):,}"), ("Doublons", str(report.duplicated_windows if report else "par patient"))])
+        st.caption("L'oversampling duplique des fenêtres existantes; il ne doit être appliqué qu'au train lors d'une évaluation.")
+    st.subheader("Splits anti-fuite")
+    split_group = st.selectbox("Grouper par", ["patient", "recording"], format_func=lambda value: "Patient" if value == "patient" else "Enregistrement")
+    if st.button("Créer train / validation / test", key="create_split"):
+        split_frame, assignments = group_split(dataset, group_by=split_group, seed=seed)
+        st.session_state.window_split = split_frame
+        st.session_state.window_split_assignments = assignments
+    split_frame = st.session_state.get("window_split")
+    if split_frame is not None:
+        st.info(f"Split par {split_group}: aucun groupe n'est partagé entre train, validation et test. Appliquez le balancing uniquement au train; les fenêtres adjacentes restent corrélées.")
+        st.dataframe(split_frame.groupby("split").size().rename("windows").reset_index(), hide_index=True)
+        for split_name in ("train", "validation", "test"):
+            split_part = split_frame.loc[split_frame["split"].eq(split_name)]
+            if not split_part.empty:
+                _download_dataset(split_part, f"eeg_features_{split_name}")
+    st.subheader("Visualisations et inspection")
+    plot_left, plot_right = st.columns(2)
+    plot_left.plotly_chart(px.histogram(dataset, x="label", color="label", title="Distribution avant balancing"), use_container_width=True, config=PLOTLY_CONFIG)
+    if balanced is not None:
+        plot_right.plotly_chart(px.histogram(balanced, x="label", color="label", title="Distribution après balancing"), use_container_width=True, config=PLOTLY_CONFIG)
+    feature_names = feature_columns(list(st.session_state.get("dataset_feature_channels", channels)))
+    selected_feature = st.selectbox("Feature à comparer", feature_names)
+    st.plotly_chart(px.box(dataset, x="label", y=selected_feature, color="label", points=False, title=f"{selected_feature} par classe"), use_container_width=True, config=PLOTLY_CONFIG)
+    patient_counts = dataset.groupby(["patient_id", "label"]).size().reset_index(name="windows")
+    st.plotly_chart(px.bar(patient_counts, x="patient_id", y="windows", color="label", barmode="group", title="Fenêtres par patient"), use_container_width=True, config=PLOTLY_CONFIG)
+    selected_index = st.selectbox("Fenêtre à inspecter", list(dataset.index), format_func=lambda index: f"{dataset.loc[index, 'recording_id']} · fenêtre {dataset.loc[index, 'window_id']} · label {dataset.loc[index, 'label']}")
+    selected_row = dataset.loc[selected_index]
+    record = next(item for item in records if item.recording_id == selected_row["recording_id"])
+    inspection = cached_window(str(record.signal_path), (channels[0],), float(selected_row["start_time"]), float(selected_row["end_time"]), config["cache_dir"])
+    inspection_config = config if record.recording_id == config["record"].recording_id else {**config, "record": record, "metadata": cached_metadata(str(record.signal_path), config["cache_dir"])}
+    inspection_seizures, _ = _dataset_annotations(inspection_config, record, workbook, allow_provisional)
+    inspection_fig = signal_figure(inspection, [channels[0]], inspection_seizures, "stacked", 5000, "plotly_white")
+    inspection_fig.add_vrect(x0=float(selected_row["start_time"]), x1=float(selected_row["end_time"]), fillcolor="#d64550", opacity=0.15, line_width=1)
+    st.plotly_chart(inspection_fig, use_container_width=True, config=PLOTLY_CONFIG)
+    st.plotly_chart(px.bar(dataset.groupby("recording_id").size().rename("windows").reset_index(), x="recording_id", y="windows", title="Fenêtres par enregistrement"), use_container_width=True, config=PLOTLY_CONFIG)
+    st.subheader("Exports")
+    _download_dataset(dataset, "eeg_features_all_patients" if scope == "Tous les enregistrements" else f"eeg_features_patient_{config['record'].recording_id}")
+    if balanced is not None:
+        _download_dataset(balanced, "eeg_features_balanced")
+    x, y = split_xy(dataset)
+    _download_dataset(x, "eeg_features_X")
+    _download_dataset(y.to_frame(), "eeg_features_y")
+    compact_columns = ["patient_id", "window_id", *feature_names, "label"]
+    _download_dataset(dataset[compact_columns], "eeg_features_compact")
+    export_recording = st.selectbox("Exporter un enregistrement", sorted(dataset["recording_id"].unique()))
+    recording_dataset = dataset.loc[dataset["recording_id"].eq(export_recording)]
+    _download_dataset(recording_dataset, f"eeg_features_recording_{export_recording}")
+
+
 def comparison_tab(config: dict, seizures: pd.DataFrame) -> None:
     """Render the optional signal comparison and spectral analysis."""
     channel = st.selectbox("Canal a comparer", config["channels"], key="compare_channel")
@@ -381,7 +569,7 @@ def main() -> None:
     raw, seizures = _get_seizures(config)
     st.markdown(f"<div class='app-header'><h1>EEG Seizure Explorer</h1><div class='status'><b>{config['record'].recording_id}</b> · {layout_name(config['channels'])} · {len(config['channels'])} canal(aux) · <b>{len(seizures)} crise(s)</b> · temps en secondes</div></div>", unsafe_allow_html=True)
     pipeline_view()
-    tabs = st.tabs(["Apercu / Overview", "Annotations et crises", "Partie III - Variable cible", "Partie IV - Segmentation", "Partie V - Caracteristiques", "Comparaison", "Aide"])
+    tabs = st.tabs(["Apercu / Overview", "Annotations et crises", "Partie III - Variable cible", "Partie IV - Segmentation", "Partie V - Caracteristiques", "Window Features & Dataset", "Comparaison", "Aide"])
     with tabs[0]:
         overview_tab(config, seizures)
     with tabs[1]:
@@ -393,6 +581,8 @@ def main() -> None:
     with tabs[4]:
         features_tab(config, seizures)
     with tabs[5]:
-        comparison_tab(config, seizures)
+        window_features_tab(config, seizures)
     with tabs[6]:
+        comparison_tab(config, seizures)
+    with tabs[7]:
         help_tab()
