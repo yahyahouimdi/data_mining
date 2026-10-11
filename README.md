@@ -124,6 +124,59 @@ classification can be added after the target-generation stage.
 	are selected.
 - CSV and Parquet feature-dataset exports.
 
+### Window Features & Dataset
+
+This tab is the supervised dataset pipeline for machine-learning preparation.
+It reads original CSV samples, never visualization-downsampled values, and
+supports one recording or all discovered recordings. Missing or invalid
+authoritative annotations exclude a recording by default; provisional `h`
+labels require an explicit opt-in warning.
+
+#### Full dataset schema
+
+Rows are complete windows numbered from **1** within each recording. The
+default window is 2 seconds with 50% overlap. Sampling frequency is computed
+from the median positive difference in the source `Time` column. The full
+schema is:
+
+```text
+patient_id, recording_id, window_id, start_time, end_time,
+<channel>_<feature> ...,
+label
+```
+
+`label` is `1` when at least the configured percentage of window samples
+(default 50%) falls inside a validated Excel seizure interval, otherwise `0`.
+`Std` and `Variance` use population definitions (`ddof=0`). The eight features
+for every selected channel are `Mean`, `Std`, `Variance`, `Min`, `Max`,
+`Amplitude` (`Max - Min`), `RMS` (square root of mean squared samples), and
+`Energy` (sum of squared samples). For 17 channels this gives 136 feature
+columns and 142 full-dataset columns. A compact export contains
+`patient_id`, `window_id`, the features, and `label` (139 columns).
+
+Patient IDs are taken from an explicit mapping when one exists; the current
+files do not contain a separate patient field, so the normalized recording ID
+is used as the traceable fallback.
+
+#### Balancing and leakage control
+
+The tab supports no balancing, random undersampling, random oversampling, and
+hybrid sampling with a reproducible seed. Oversampling duplicates minority
+windows. Balancing is performed only after labels and raw-sample features are
+created. It can be global or per patient; patients containing one class are
+reported and left unchanged.
+
+Group splits keep every patient, or every recording, in exactly one of train,
+validation, and test. Do not randomly split overlapping windows: adjacent
+windows are correlated. For model evaluation, create the group split first,
+then balance only the training partition. Validation and test partitions must
+remain unbalanced and untouched.
+
+The tab exports the full unbalanced dataset, balanced dataset, compact dataset,
+`X`, `y`, per-split files, and per-recording data in CSV or Parquet without a
+DataFrame index. It also previews class distributions, feature box plots,
+per-patient counts, and an original-signal window inspection plot.
+
 ### Comparison
 
 - Channel selection for spectral analysis.
@@ -177,13 +230,15 @@ eeg_app/
 		channels.py                Dynamic channel grouping, layouts, and units
 		annotations.py             Cleaning, pairing, editing, and statistics
 		target.py                  Binary target construction
+		dataset.py                 ML window schema, balancing, splits, and exports
 		features.py                Window-level temporal feature extraction
 		signal_utils.py            Sampling, normalization, decimation, spectra
 		plotting.py                Plotly signal, seizure, target, and duration plots
 		ui.py                      CSS injection and reusable metric cards
 
 tests/
-	test_core.py                 Nine focused unit tests
+	test_core.py                 Core helper tests
+	test_dataset.py              Window dataset, balancing, split, and export tests
 
 data/
 	*_0000d.csv                  Signal recordings
@@ -251,9 +306,12 @@ Python 3.10 or newer is recommended.
 	 edit seizure intervals in the data editor.
 7. Check the duration statistics and coefficient-of-variation conclusion.
 8. Open **Variable cible** and inspect the normal/seizure class balance.
-9. Export the labeled recording as CSV or Parquet.
-10. Use the exported target as input for future windowing, feature extraction,
-		and classifier development.
+9. Open **Window Features & Dataset**, select channels and window settings,
+		then generate one-recording or all-recording windows.
+10. Review excluded recordings and annotation warnings before using labels.
+11. Export the unbalanced dataset, optionally balance it, and create a
+		patient-aware or recording-aware train/validation/test split.
+12. Train only on the training split; do not balance validation or test data.
 
 ## Verification performed
 
