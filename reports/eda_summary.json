@@ -1,0 +1,99 @@
+{
+  "source": "training partition of window_2s_unbalanced.parquet",
+  "windows": 16404,
+  "class_counts": {
+    "0": 15811,
+    "1": 593
+  },
+  "most_discriminative": {
+    "Beta_Power": 0.951,
+    "Theta_Power": 0.95,
+    "Alpha_Power": 0.943,
+    "Delta_Power": 0.917,
+    "Amplitude": 0.89,
+    "Variance": 0.835,
+    "Std": 0.83,
+    "Min": 0.74,
+    "RMS": 0.596,
+    "Energy": 0.585,
+    "Max": 0.578,
+    "Mean": 0.568
+  },
+  "strongest_correlations": [
+    {
+      "a": "RMS",
+      "b": "Energy",
+      "spearman": 0.998
+    },
+    {
+      "a": "Std",
+      "b": "Variance",
+      "spearman": 0.998
+    },
+    {
+      "a": "Std",
+      "b": "Amplitude",
+      "spearman": 0.966
+    },
+    {
+      "a": "Variance",
+      "b": "Amplitude",
+      "spearman": 0.966
+    },
+    {
+      "a": "Mean",
+      "b": "Min",
+      "spearman": 0.935
+    },
+    {
+      "a": "Min",
+      "b": "RMS",
+      "spearman": -0.928
+    },
+    {
+      "a": "Min",
+      "b": "Energy",
+      "spearman": -0.917
+    },
+    {
+      "a": "Mean",
+      "b": "RMS",
+      "spearman": -0.908
+    },
+    {
+      "a": "Mean",
+      "b": "Energy",
+      "spearman": -0.902
+    },
+    {
+      "a": "Mean",
+      "b": "Max",
+      "spearman": 0.867
+    },
+    {
+      "a": "Delta_Power",
+      "b": "Theta_Power",
+      "spearman": 0.762
+    },
+    {
+      "a": "Alpha_Power",
+      "b": "Beta_Power",
+      "spearman": 0.745
+    },
+    {
+      "a": "Max",
+      "b": "Energy",
+      "spearman": -0.721
+    },
+    {
+      "a": "Max",
+      "b": "RMS",
+      "spearman": -0.721
+    },
+    {
+      "a": "Min",
+      "b": "Max",
+      "spearman": 0.711
+    }
+  ]
+}

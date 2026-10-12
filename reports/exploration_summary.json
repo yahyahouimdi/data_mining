@@ -1,0 +1,127 @@
+{
+  "example_recording": "211104B_D",
+  "rows": 309760,
+  "variables": 22,
+  "eeg_channels": 19,
+  "other_channels": [
+    "SLI",
+    "ECG"
+  ],
+  "sampling_frequency_hz": 256.0,
+  "duration_seconds": 1209.99609375,
+  "missing_values": 0,
+  "first_rows": [
+    {
+      "Time": 0.0,
+      "EEGFp1": -706.735,
+      "EEGFp2": -771.887,
+      "EEGF7": -720.16,
+      "EEGF3": 94.237
+    },
+    {
+      "Time": 0.004,
+      "EEGFp1": -733.047,
+      "EEGFp2": -801.599,
+      "EEGF7": -750.588,
+      "EEGF3": 63.451
+    },
+    {
+      "Time": 0.008,
+      "EEGFp1": -781.016,
+      "EEGFp2": -887.156,
+      "EEGF7": -837.576,
+      "EEGF3": -23.0
+    },
+    {
+      "Time": 0.012,
+      "EEGFp1": -787.996,
+      "EEGFp2": -917.584,
+      "EEGF7": -867.467,
+      "EEGF3": -51.28
+    },
+    {
+      "Time": 0.016,
+      "EEGFp1": -744.86,
+      "EEGFp2": -849.926,
+      "EEGF7": -803.031,
+      "EEGF3": 14.409
+    }
+  ],
+  "seizures": [
+    {
+      "recording_id": "211104B_D_",
+      "start_time": 253.0,
+      "end_time": 259.0,
+      "duration": 6.0
+    },
+    {
+      "recording_id": "211104B_D_",
+      "start_time": 384.0,
+      "end_time": 392.0,
+      "duration": 8.0
+    },
+    {
+      "recording_id": "211104B_D_",
+      "start_time": 555.0,
+      "end_time": 565.0,
+      "duration": 10.0
+    },
+    {
+      "recording_id": "211104B_D_",
+      "start_time": 806.0,
+      "end_time": 814.0,
+      "duration": 8.0
+    },
+    {
+      "recording_id": "211104B_D_",
+      "start_time": 896.0,
+      "end_time": 904.0,
+      "duration": 8.0
+    }
+  ],
+  "duration_statistics": {
+    "count": 5.0,
+    "mean": 7.999999999997089,
+    "min": 6.000000000043656,
+    "max": 9.999999999934516,
+    "mean_interval": 152.74999999999818,
+    "cv": 0.1581138830041624
+  },
+  "sample_class_counts": {
+    "0": 299520,
+    "1": 10240
+  },
+  "sample_class_percent": {
+    "0": 96.69421487603306,
+    "1": 3.3057851239669422
+  },
+  "example_windows_2s": {
+    "total": 1209,
+    "class_0": 1164,
+    "class_1": 45
+  },
+  "all_recordings": {
+    "recordings": 18,
+    "seizures": 71,
+    "duration_mean": 13.591549295772035,
+    "duration_median": 11.000000000014552,
+    "duration_min": 2.999999999985448,
+    "duration_max": 48.99999999994907,
+    "duration_cv": 0.6763116988687786,
+    "seizure_seconds": 964.9999999998145,
+    "recorded_seconds": 25891.9296875,
+    "seizure_time_percent": 3.727030050084267
+  },
+  "windows": {
+    "1s": {
+      "total": 51766,
+      "class_0": 49800,
+      "class_1": 1966
+    },
+    "2s": {
+      "total": 25874,
+      "class_0": 24873,
+      "class_1": 1001
+    }
+  }
+}
