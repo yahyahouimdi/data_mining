@@ -10,3 +10,8 @@
 __pycache__/
 *.py[cod]
 data/.cache/
+# Notebook checkpoints
+.ipynb_checkpoints/
+
+# Generated datasets (rebuild with prepare_balanced_exports)
+extracted_data/*.parquet

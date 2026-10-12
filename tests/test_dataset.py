@@ -2,8 +2,10 @@
 
 import numpy as np
 import pandas as pd
+import pytest
 
-from eeg_app.src.dataset import balance_dataset, build_dataset_from_recordings, build_recording_dataset, export_dataset, group_split, split_xy
+from eeg_app.src.dataset import balance_dataset, balancing_audit, build_dataset_from_recordings, build_recording_dataset, export_dataset, group_split, representative_group_split, split_xy
+from eeg_app.src.experiments import balance_sequences, feature_names
 
 
 def synthetic_signal() -> pd.DataFrame:
@@ -55,6 +57,170 @@ def test_balance_methods_and_reproducibility():
     repeat, _ = balance_dataset(frame, "oversample", target_per_class=3, seed=7)
     pd.testing.assert_frame_equal(oversampled, repeat)
     assert oversampled["label"].value_counts().to_dict() == {0: 3, 1: 3}
+
+
+def synthetic_balancing_frame() -> pd.DataFrame:
+    return pd.DataFrame({
+        "patient_id": [f"p-{index % 10}" for index in range(1000)],
+        "recording_id": [f"r-{index % 20}" for index in range(1000)],
+        "window_id": np.arange(1000),
+        "start_time": np.arange(1000, dtype=float),
+        "end_time": np.arange(1000, dtype=float) + 1,
+        "feature": np.arange(1000, dtype=float) * 0.5,
+        "label": [0] * 900 + [1] * 100,
+    })
+
+
+EXPECTED_BALANCED_COUNTS = {"undersample": (100, 100, 200), "oversample": (900, 900, 1800), "hybrid": (500, 500, 1000)}
+
+
+def test_synthetic_original_counts():
+    frame = synthetic_balancing_frame()
+    assert frame["label"].value_counts().to_dict() == {0: 900, 1: 100}
+    assert len(frame) == 1000
+
+
+@pytest.mark.parametrize("method", list(EXPECTED_BALANCED_COUNTS))
+def test_balancing_exact_counts_schema_and_reproducibility(method):
+    frame = synthetic_balancing_frame()
+    label_zero, label_one, total = EXPECTED_BALANCED_COUNTS[method]
+    balanced, report = balance_dataset(frame, method, seed=11)
+    counts = balanced["label"].value_counts()
+    assert set(balanced["label"].unique()) == {0, 1}
+    assert counts[0] == counts[1]
+    assert counts.to_dict() == {0: label_zero, 1: label_one}
+    assert len(balanced) == total
+    assert list(balanced.columns) == list(frame.columns)
+    assert balanced["label"].notna().all()
+    assert (report.final_class_0, report.final_class_1, report.target_per_class) == (label_zero, label_one, label_zero)
+    repeated, _ = balance_dataset(frame, method, seed=11)
+    pd.testing.assert_frame_equal(balanced, repeated)
+    # Row alignment: every sampled row is an unmodified source row.
+    source = frame.set_index("window_id")
+    pd.testing.assert_frame_equal(balanced.set_index("window_id"), source.loc[balanced["window_id"]], check_names=False)
+
+
+def test_balancing_methods_are_genuinely_different():
+    frame = synthetic_balancing_frame()
+    undersampled, _ = balance_dataset(frame, "undersample", seed=3)
+    oversampled, _ = balance_dataset(frame, "oversample", seed=3)
+    hybrid, _ = balance_dataset(frame, "hybrid", seed=3)
+    minority, majority = set(range(900, 1000)), set(range(900))
+    # Undersampling keeps every minority row once and drops majority rows.
+    assert set(undersampled.loc[undersampled["label"].eq(1), "window_id"]) == minority
+    assert not undersampled["window_id"].duplicated().any()
+    # Oversampling keeps every majority row once and duplicates minority rows.
+    assert set(oversampled.loc[oversampled["label"].eq(0), "window_id"]) == majority
+    assert not oversampled.loc[oversampled["label"].eq(0), "window_id"].duplicated().any()
+    assert oversampled.loc[oversampled["label"].eq(1), "window_id"].duplicated().any()
+    # Hybrid drops majority rows and duplicates minority rows.
+    assert not hybrid.loc[hybrid["label"].eq(0), "window_id"].duplicated().any()
+    assert hybrid.loc[hybrid["label"].eq(1), "window_id"].duplicated().any()
+    assert len({len(undersampled), len(oversampled)}) == 2
+    assert not hybrid["window_id"].sort_values().reset_index(drop=True).equals(frame["window_id"])
+
+
+def test_balancing_seed_changes_selection():
+    frame = synthetic_balancing_frame()
+    first, _ = balance_dataset(frame, "undersample", seed=1)
+    second, _ = balance_dataset(frame, "undersample", seed=2)
+    assert not first.equals(second)
+
+
+def test_balancing_rejects_missing_class():
+    with pytest.raises(ValueError, match="both label classes"):
+        balance_dataset(pd.DataFrame({"label": [0, 0], "feature": [1, 2]}), "oversample")
+    with pytest.raises(ValueError, match="both label classes"):
+        balance_dataset(pd.DataFrame({"label": [1, 1], "feature": [1, 2]}), "undersample")
+
+
+def test_balancing_rejects_null_labels():
+    with pytest.raises(ValueError, match="non-null"):
+        balance_dataset(pd.DataFrame({"label": [0, 1, None], "feature": [1, 2, 3]}), "hybrid")
+
+
+def test_identifiers_and_label_are_not_features():
+    frame = synthetic_balancing_frame().assign(split="train")
+    assert feature_names(frame) == ["feature"]
+    x, _ = split_xy(frame)
+    assert list(x.columns) == ["feature"]
+
+
+def test_balancing_does_not_change_validation_or_test():
+    frame = synthetic_balancing_frame()
+    frame["label"] = [0] * 700 + [1] * 100 + [0] * 90 + [1] * 10 + [0] * 90 + [1] * 10
+    frame["split"] = ["train"] * 800 + ["validation"] * 100 + ["test"] * 100
+    validation_before = frame.loc[frame["split"].eq("validation")].copy(deep=True)
+    test_before = frame.loc[frame["split"].eq("test")].copy(deep=True)
+    for method, total in (("undersample", 200), ("oversample", 1400), ("hybrid", 800)):
+        training, _ = balance_dataset(frame.loc[frame["split"].eq("train")].drop(columns="split"), method, seed=4)
+        assert len(training) == total
+        pd.testing.assert_frame_equal(frame.loc[frame["split"].eq("validation")], validation_before)
+        pd.testing.assert_frame_equal(frame.loc[frame["split"].eq("test")], test_before)
+        # No validation or test window leaks into the balanced training rows.
+        assert set(training["window_id"]).isdisjoint(set(validation_before["window_id"]) | set(test_before["window_id"]))
+
+
+def grouped_frame(recordings: int = 10) -> pd.DataFrame:
+    rows = []
+    for recording in range(recordings):
+        rows.extend({"patient_id": f"p-{recording}", "recording_id": f"r-{recording}", "window_id": index, "start_time": index, "label": int(index < 20 and recording % 2 == 0)} for index in range(40))
+    return pd.DataFrame(rows)
+
+
+@pytest.mark.parametrize("group_by, column", [("recording", "recording_id"), ("patient", "patient_id")])
+def test_split_keeps_groups_in_exactly_one_partition(group_by, column):
+    split, assignments, _ = representative_group_split(grouped_frame(), group_by=group_by, seed=42)
+    groups = {name: set(split.loc[split["split"].eq(name), column]) for name in ("train", "validation", "test")}
+    assert all(groups.values())
+    assert groups["train"].isdisjoint(groups["validation"])
+    assert groups["train"].isdisjoint(groups["test"])
+    assert groups["validation"].isdisjoint(groups["test"])
+    assert set().union(*groups.values()) == set(split[column])
+    assert set(assignments) == set(split[column])
+    # About 20% of the groups are held out for the final test.
+    assert len(groups["test"]) == 2
+
+
+def test_split_is_reproducible():
+    first, _, _ = representative_group_split(grouped_frame(), seed=42)
+    second, _, _ = representative_group_split(grouped_frame(), seed=42)
+    pd.testing.assert_frame_equal(first, second)
+
+
+def test_small_group_fallback_split_stays_isolated():
+    split, _, _ = representative_group_split(grouped_frame(4), group_by="recording", seed=42)
+    assert all(split.groupby("recording_id")["split"].nunique() == 1)
+    assert {"train", "test"} <= set(split["split"])
+    assert split.loc[split["split"].eq("train"), "recording_id"].nunique() >= 2
+
+
+def test_balancing_audit_report_rows_and_warnings():
+    split, _, _ = representative_group_split(grouped_frame(), seed=42)
+    audit = balancing_audit(split, seed=42)
+    assert audit["dataset_name"].tolist() == ["original", "train", "validation", "test", "train_undersample", "train_oversample", "train_hybrid"]
+    assert {"total_rows", "label_0_rows", "label_1_rows", "label_0_percent", "label_1_percent", "imbalance_ratio", "unique_recordings", "unique_patients"} <= set(audit.columns)
+    original = audit.iloc[0]
+    assert (original["total_rows"], original["label_0_rows"], original["label_1_rows"]) == (400, 300, 100)
+    assert original["imbalance_ratio"] == 3.0
+    assert original["unique_recordings"] == 10
+    balanced = audit.loc[audit["dataset_name"].str.startswith("train_")]
+    assert (balanced["label_0_rows"] == balanced["label_1_rows"]).all()
+    assert (balanced["imbalance_ratio"] == 1.0).all()
+    assert balanced["total_rows"].nunique() == 3
+    # Validation and test hold a single seizure event each: flagged as weak evidence.
+    assert "seizure events" in audit.loc[audit["dataset_name"].eq("test"), "warnings"].iloc[0]
+
+
+def test_balance_sequences_uses_shared_targets():
+    values = np.arange(1000, dtype=np.float32).reshape(1000, 1, 1)
+    labels = np.array([0] * 900 + [1] * 100)
+    for method, (label_zero, label_one, total) in EXPECTED_BALANCED_COUNTS.items():
+        balanced_values, balanced_labels = balance_sequences(values, labels, method, seed=5)
+        assert len(balanced_values) == total
+        assert np.bincount(balanced_labels).tolist() == [label_zero, label_one]
+        # Each sequence keeps its own label.
+        assert np.array_equal(balanced_labels, labels[balanced_values[:, 0, 0].astype(int)])
 
 
 def test_group_split_isolation_and_xy():
