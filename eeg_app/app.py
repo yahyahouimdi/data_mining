@@ -12,7 +12,7 @@ import streamlit as st
 
 from .src.annotations import duration_statistics, excel_seizures_for_recording, normalize_recording_id, normalize_seizure_table, pair_seizures
 from .src.channels import channel_type, group_channels, layout_name
-from .src.dataset import DATASET_METADATA, balance_dataset, build_recording_dataset, detect_signal_channels, feature_columns, group_split, patient_id_for_recording, split_xy
+from .src.dataset import DATASET_METADATA, balance_dataset, balancing_audit, build_recording_dataset, detect_signal_channels, feature_columns, patient_id_for_recording, representative_group_split, split_xy
 from .src.features import FEATURE_NAMES, build_feature_dataset
 from .src.io_utils import annotation_source_warning, discover_recordings, read_annotations, read_csv_with_fallback, read_signal_window, signal_columns, signal_metadata
 from .src.plotting import duration_figures, seizure_timeline, signal_figure, target_figure, window_class_figure
@@ -434,6 +434,7 @@ def window_features_tab(config: dict, seizures: pd.DataFrame) -> None:
         st.session_state.window_dataset = dataset
         st.session_state.window_dataset_warnings = warning_messages
         st.session_state.balanced_dataset = None
+        st.session_state.window_split = None
     dataset = st.session_state.get("window_dataset")
     if dataset is None:
         st.info("Configurez les paramètres puis lancez la génération.")
@@ -450,43 +451,64 @@ def window_features_tab(config: dict, seizures: pd.DataFrame) -> None:
     balance_method = st.selectbox("Méthode", ["none", "undersample", "oversample", "hybrid"], format_func=lambda value: {"none": "Aucune", "undersample": "Random undersampling", "oversample": "Random oversampling", "hybrid": "Hybrid sampling"}[value])
     balance_scope = st.selectbox("Portée du balancing", ["Global", "Par patient"])
     seed = int(st.number_input("Seed", min_value=0, value=42, step=1))
-    default_target = max(1, min(distribution["class_0"], distribution["class_1"]))
-    target_count = int(st.number_input("Fenêtres par classe (hybrid/optionnel)", min_value=1, value=default_target, step=1))
+    st.caption("Appliqué au train uniquement. Undersample: majorité réduite à l'effectif minoritaire. Oversample: minorité rééchantillonnée avec remise jusqu'à l'effectif majoritaire. Hybrid: les deux classes ramenées au point milieu entier des deux effectifs.")
     if st.button("Appliquer le balancing", key="apply_balance"):
-        if balance_scope == "Global":
-            balanced, report = balance_dataset(dataset, balance_method, target_per_class=target_count, seed=seed)
-            st.session_state.balanced_dataset = balanced
+        source_split = st.session_state.get("window_split")
+        if source_split is None:
+            source_split, assignments, _ = representative_group_split(dataset, group_by="recording", seed=seed)
+            st.session_state.window_split = source_split
+            st.session_state.window_split_assignments = assignments
+        train_source = source_split.loc[source_split["split"].eq("train")].drop(columns="split")
+        untouched = source_split.loc[~source_split["split"].eq("train")]
+        try:
+            report = None
+            if balance_scope == "Global":
+                balanced_train, report = balance_dataset(train_source, balance_method, seed=seed)
+            else:
+                parts: list[pd.DataFrame] = []
+                for patient, group in train_source.groupby("patient_id", sort=False):
+                    if group["label"].nunique() < 2:
+                        st.warning(f"Patient {patient}: une seule classe, balancing ignoré.")
+                        parts.append(group)
+                    else:
+                        parts.append(balance_dataset(group, balance_method, seed=seed)[0])
+                balanced_train = pd.concat(parts, ignore_index=True)
+            st.session_state.balanced_dataset = pd.concat([balanced_train.assign(split="train"), untouched], ignore_index=True)
             st.session_state.balance_report = report
-        else:
-            parts: list[pd.DataFrame] = []
-            for patient, group in dataset.groupby("patient_id", sort=False):
-                if group["label"].nunique() < 2:
-                    st.warning(f"Patient {patient}: une seule classe, balancing ignoré.")
-                    parts.append(group)
-                else:
-                    parts.append(balance_dataset(group, balance_method, target_per_class=target_count, seed=seed)[0])
-            st.session_state.balanced_dataset = pd.concat(parts, ignore_index=True)
+        except ValueError as error:
+            st.error(f"Balancing impossible: {error}")
     balanced = st.session_state.get("balanced_dataset")
     if balanced is not None:
-        balanced_distribution = class_distribution(balanced["label"])
+        balanced_distribution = class_distribution(balanced.loc[balanced["split"].eq("train"), "label"])
         report = st.session_state.get("balance_report")
-        metric_row([("Final classe 0", str(balanced_distribution["class_0"])), ("Final classe 1", str(balanced_distribution["class_1"])), ("Taille finale", f"{len(balanced):,}"), ("Doublons", str(report.duplicated_windows if report else "par patient"))])
-        st.caption("L'oversampling duplique des fenêtres existantes; il ne doit être appliqué qu'au train lors d'une évaluation.")
+        metric_row([("Train classe 0", str(balanced_distribution["class_0"])), ("Train classe 1", str(balanced_distribution["class_1"])), ("Taille du train", f"{balanced_distribution['class_0'] + balanced_distribution['class_1']:,}"), ("Doublons", str(report.duplicated_windows if report else "par patient"))])
+        st.caption("Seul le train est rééchantillonné; validation et test restent intacts. L'oversampling duplique des fenêtres existantes.")
     st.subheader("Splits anti-fuite")
     split_group = st.selectbox("Grouper par", ["patient", "recording"], format_func=lambda value: "Patient" if value == "patient" else "Enregistrement")
     if st.button("Créer train / validation / test", key="create_split"):
-        split_frame, assignments = group_split(dataset, group_by=split_group, seed=seed)
+        split_frame, assignments, _ = representative_group_split(dataset, group_by=split_group, seed=seed)
         st.session_state.window_split = split_frame
         st.session_state.window_split_assignments = assignments
+        st.session_state.balanced_dataset = None
+        balanced = None
     split_frame = st.session_state.get("window_split")
     if split_frame is not None:
-        st.info(f"Split par {split_group}: aucun groupe n'est partagé entre train, validation et test. Appliquez le balancing uniquement au train; les fenêtres adjacentes restent corrélées.")
-        st.dataframe(split_frame.groupby("split").size().rename("windows").reset_index(), hide_index=True)
+        st.info("Aucun groupe n'est partagé entre train, validation et test (environ 80% développement / 20% test). Appliquez le balancing uniquement au train; les fenêtres adjacentes restent corrélées.")
+        st.markdown("**Rapport d'audit du balancing**")
+        try:
+            audit = balancing_audit(split_frame, seed=seed)
+        except ValueError as error:
+            st.warning(f"Datasets équilibrés non audités: {error}")
+            audit = balancing_audit(split_frame, methods=(), seed=seed)
+        st.dataframe(audit, use_container_width=True, hide_index=True)
+        for row in audit.loc[audit["warnings"].ne("")].itertuples(index=False):
+            st.warning(f"{row.dataset_name}: {row.warnings}")
+        _download_dataset(audit, "balancing_audit_report")
     st.subheader("Visualisations et inspection")
     plot_left, plot_right = st.columns(2)
     plot_left.plotly_chart(px.histogram(dataset, x="label", color="label", title="Distribution avant balancing"), use_container_width=True, config=PLOTLY_CONFIG)
     if balanced is not None:
-        plot_right.plotly_chart(px.histogram(balanced, x="label", color="label", title="Distribution après balancing"), use_container_width=True, config=PLOTLY_CONFIG)
+        plot_right.plotly_chart(px.histogram(balanced.loc[balanced["split"].eq("train")], x="label", color="label", title="Distribution du train après balancing"), use_container_width=True, config=PLOTLY_CONFIG)
     feature_names = feature_columns(list(st.session_state.get("dataset_feature_channels", channels)))
     selected_feature = st.selectbox("Feature à comparer", feature_names)
     st.plotly_chart(px.box(dataset, x="label", y=selected_feature, color="label", points=False, title=f"{selected_feature} par classe"), use_container_width=True, config=PLOTLY_CONFIG)
@@ -514,7 +536,7 @@ def window_features_tab(config: dict, seizures: pd.DataFrame) -> None:
         if balanced is None:
             st.caption("Apply balancing above to enable this export.")
         else:
-            st.caption("Dataset after the selected balancing method")
+            st.caption("Balanced train rows plus untouched validation and test rows, identified by the split column")
             _download_dataset(balanced, "eeg_features_balanced")
     st.markdown("**Train / validation / test datasets**")
     st.caption("Group-isolated files for machine-learning evaluation. Generate the split above first.")
