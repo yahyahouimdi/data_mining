@@ -1,0 +1,109 @@
+{
+  "seed": 42,
+  "grouping": "recording_id",
+  "patient_mapping_available": false,
+  "test_used": false,
+  "balanced_rows_used": false,
+  "folds": [
+    {
+      "dataset": "window_1s",
+      "fold": 1,
+      "recordings": 2,
+      "rows": 9610,
+      "label_0_rows": 9396,
+      "label_1_rows": 214,
+      "seizure_rate": 0.0222684703433923,
+      "seizure_events": 14
+    },
+    {
+      "dataset": "window_1s",
+      "fold": 2,
+      "recordings": 3,
+      "rows": 8499,
+      "label_0_rows": 8115,
+      "label_1_rows": 384,
+      "seizure_rate": 0.04518178609248147,
+      "seizure_events": 13
+    },
+    {
+      "dataset": "window_1s",
+      "fold": 3,
+      "recordings": 3,
+      "rows": 8145,
+      "label_0_rows": 7937,
+      "label_1_rows": 208,
+      "seizure_rate": 0.025537139349294045,
+      "seizure_events": 6
+    },
+    {
+      "dataset": "window_1s",
+      "fold": 4,
+      "recordings": 3,
+      "rows": 7713,
+      "label_0_rows": 7169,
+      "label_1_rows": 544,
+      "seizure_rate": 0.07053027356411254,
+      "seizure_events": 18
+    },
+    {
+      "dataset": "window_1s",
+      "fold": 5,
+      "recordings": 3,
+      "rows": 7351,
+      "label_0_rows": 7155,
+      "label_1_rows": 196,
+      "seizure_rate": 0.026663039042307168,
+      "seizure_events": 8
+    },
+    {
+      "dataset": "window_2s",
+      "fold": 1,
+      "recordings": 3,
+      "rows": 4229,
+      "label_0_rows": 4107,
+      "label_1_rows": 122,
+      "seizure_rate": 0.02884842752423741,
+      "seizure_events": 11
+    },
+    {
+      "dataset": "window_2s",
+      "fold": 2,
+      "recordings": 3,
+      "rows": 4071,
+      "label_0_rows": 3966,
+      "label_1_rows": 105,
+      "seizure_rate": 0.025792188651436992,
+      "seizure_events": 6
+    },
+    {
+      "dataset": "window_2s",
+      "fold": 3,
+      "recordings": 3,
+      "rows": 3855,
+      "label_0_rows": 3577,
+      "label_1_rows": 278,
+      "seizure_rate": 0.07211413748378728,
+      "seizure_events": 18
+    },
+    {
+      "dataset": "window_2s",
+      "fold": 4,
+      "recordings": 3,
+      "rows": 3674,
+      "label_0_rows": 3573,
+      "label_1_rows": 101,
+      "seizure_rate": 0.027490473598258028,
+      "seizure_events": 8
+    },
+    {
+      "dataset": "window_2s",
+      "fold": 5,
+      "recordings": 2,
+      "rows": 4823,
+      "label_0_rows": 4640,
+      "label_1_rows": 183,
+      "seizure_rate": 0.037943188886585114,
+      "seizure_events": 16
+    }
+  ]
+}

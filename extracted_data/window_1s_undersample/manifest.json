@@ -1,0 +1,30 @@
+{
+  "window_duration_seconds": 1.0,
+  "balancing_method": "undersample",
+  "seed": 42,
+  "split_group": "recording",
+  "warnings": [
+    "200625A_F_: excluded because validated Excel intervals are missing or invalid",
+    "210204B_C_: excluded because validated Excel intervals are missing or invalid",
+    "210208B_G_: excluded because validated Excel intervals are missing or invalid",
+    "210504B_C_: excluded because validated Excel intervals are missing or invalid"
+  ],
+  "balance_report": {
+    "method": "undersample",
+    "seed": 42,
+    "target_per_class": 1162,
+    "original_class_0": 31657,
+    "original_class_1": 1162,
+    "final_class_0": 1162,
+    "final_class_1": 1162,
+    "removed_windows": 30495,
+    "duplicated_windows": 0
+  },
+  "whole_rows": 21271,
+  "train_rows": 2324,
+  "validation_rows": 8499,
+  "test_rows": 10448,
+  "frequency_features": true,
+  "unbalanced_source": "window_1s_unbalanced.parquet",
+  "note": "whole.csv combines balanced train with untouched validation and test"
+}

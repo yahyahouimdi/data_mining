@@ -1,0 +1,20 @@
+{
+  "190304A_E_": "train",
+  "210427B_C_": "train",
+  "210914B_A_": "train",
+  "211104B_D_": "train",
+  "220106A_A_": "train",
+  "220121B_D_": "train",
+  "230105B_H_": "train",
+  "230224B_B_": "train",
+  "230406B_A_": "train",
+  "230515B_G_": "train",
+  "230718A_A_": "train",
+  "191113A_D_": "validation",
+  "230102B_F_": "validation",
+  "230519A_E_": "validation",
+  "210406A_F_": "test",
+  "210928B_B_": "test",
+  "211027B_C_": "test",
+  "230210B_D_": "test"
+}
