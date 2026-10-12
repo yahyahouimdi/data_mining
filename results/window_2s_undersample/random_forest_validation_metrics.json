@@ -1,0 +1,91 @@
+{
+  "Accuracy": 0.9821092278719398,
+  "Precision": 0.8370786516853933,
+  "Recall": 0.7602040816326531,
+  "F1": 0.7967914438502673,
+  "ConfusionMatrix": [
+    [
+      4023,
+      29
+    ],
+    [
+      47,
+      149
+    ]
+  ],
+  "ClassificationReport": {
+    "normal": {
+      "precision": 0.9884520884520884,
+      "recall": 0.9928430404738401,
+      "f1-score": 0.9906426988426495,
+      "support": 4052.0
+    },
+    "seizure": {
+      "precision": 0.8370786516853933,
+      "recall": 0.7602040816326531,
+      "f1-score": 0.7967914438502673,
+      "support": 196.0
+    },
+    "accuracy": 0.9821092278719398,
+    "macro avg": {
+      "precision": 0.9127653700687408,
+      "recall": 0.8765235610532466,
+      "f1-score": 0.8937170713464584,
+      "support": 4248.0
+    },
+    "weighted avg": {
+      "precision": 0.9814678150042843,
+      "recall": 0.9821092278719398,
+      "f1-score": 0.9816985260605152,
+      "support": 4248.0
+    }
+  },
+  "PR-AUC": 0.824544699512362,
+  "params": {
+    "model__max_depth": 12,
+    "model__min_samples_leaf": 5
+  },
+  "threshold": 0.6759367585029349,
+  "candidates": [
+    {
+      "params": {
+        "model__max_depth": 12,
+        "model__min_samples_leaf": 1
+      },
+      "threshold": 0.7020964200995939,
+      "F1": 0.7755102040816326,
+      "Recall": 0.6785714285714286,
+      "Precision": 0.9047619047619048
+    },
+    {
+      "params": {
+        "model__max_depth": 12,
+        "model__min_samples_leaf": 5
+      },
+      "threshold": 0.6759367585029349,
+      "F1": 0.7967914438502673,
+      "Recall": 0.7602040816326531,
+      "Precision": 0.8370786516853933
+    },
+    {
+      "params": {
+        "model__max_depth": null,
+        "model__min_samples_leaf": 1
+      },
+      "threshold": 0.6866666666666666,
+      "F1": 0.7701149425287356,
+      "Recall": 0.6836734693877551,
+      "Precision": 0.881578947368421
+    },
+    {
+      "params": {
+        "model__max_depth": null,
+        "model__min_samples_leaf": 5
+      },
+      "threshold": 0.6759367585029349,
+      "F1": 0.7967914438502673,
+      "Recall": 0.7602040816326531,
+      "Precision": 0.8370786516853933
+    }
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "Accuracy": 0.9821092278719398,
+  "Precision": 0.8947368421052632,
+  "Recall": 0.6938775510204082,
+  "F1": 0.7816091954022989,
+  "ConfusionMatrix": [
+    [
+      4036,
+      16
+    ],
+    [
+      60,
+      136
+    ]
+  ],
+  "ClassificationReport": {
+    "normal": {
+      "precision": 0.9853515625,
+      "recall": 0.9960513326752222,
+      "f1-score": 0.990672557682867,
+      "support": 4052.0
+    },
+    "seizure": {
+      "precision": 0.8947368421052632,
+      "recall": 0.6938775510204082,
+      "f1-score": 0.7816091954022989,
+      "support": 196.0
+    },
+    "accuracy": 0.9821092278719398,
+    "macro avg": {
+      "precision": 0.9400442023026316,
+      "recall": 0.8449644418478152,
+      "f1-score": 0.8861408765425829,
+      "support": 4248.0
+    },
+    "weighted avg": {
+      "precision": 0.9811706573217118,
+      "recall": 0.9821092278719398,
+      "f1-score": 0.9810265080107882,
+      "support": 4248.0
+    }
+  },
+  "PR-AUC": 0.7353145182029719,
+  "params": {
+    "model__n_neighbors": 21,
+    "model__weights": "distance"
+  },
+  "threshold": 0.9573124987810085,
+  "candidates": [
+    {
+      "params": {
+        "model__n_neighbors": 5,
+        "model__weights": "uniform"
+      },
+      "threshold": 1.0,
+      "F1": 0.7185929648241206,
+      "Recall": 0.7295918367346939,
+      "Precision": 0.7079207920792079
+    },
+    {
+      "params": {
+        "model__n_neighbors": 5,
+        "model__weights": "distance"
+      },
+      "threshold": 1.0,
+      "F1": 0.7185929648241206,
+      "Recall": 0.7295918367346939,
+      "Precision": 0.7079207920792079
+    },
+    {
+      "params": {
+        "model__n_neighbors": 11,
+        "model__weights": "uniform"
+      },
+      "threshold": 1.0,
+      "F1": 0.7560321715817694,
+      "Recall": 0.7193877551020408,
+      "Precision": 0.7966101694915254
+    },
+    {
+      "params": {
+        "model__n_neighbors": 11,
+        "model__weights": "distance"
+      },
+      "threshold": 1.0,
+      "F1": 0.7560321715817694,
+      "Recall": 0.7193877551020408,
+      "Precision": 0.7966101694915254
+    },
+    {
+      "params": {
+        "model__n_neighbors": 21,
+        "model__weights": "uniform"
+      },
+      "threshold": 1.0,
+      "F1": 0.7780979827089337,
+      "Recall": 0.6887755102040817,
+      "Precision": 0.8940397350993378
+    },
+    {
+      "params": {
+        "model__n_neighbors": 21,
+        "model__weights": "distance"
+      },
+      "threshold": 0.9573124987810085,
+      "F1": 0.7816091954022989,
+      "Recall": 0.6938775510204082,
+      "Precision": 0.8947368421052632
+    }
+  ]
+}

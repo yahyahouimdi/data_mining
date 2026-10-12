@@ -1,0 +1,111 @@
+{
+  "Accuracy": 0.9477401129943502,
+  "Precision": 0.45987654320987653,
+  "Recall": 0.7602040816326531,
+  "F1": 0.573076923076923,
+  "ConfusionMatrix": [
+    [
+      3877,
+      175
+    ],
+    [
+      47,
+      149
+    ]
+  ],
+  "ClassificationReport": {
+    "normal": {
+      "precision": 0.9880224260958206,
+      "recall": 0.9568114511352419,
+      "f1-score": 0.9721664994984955,
+      "support": 4052.0
+    },
+    "seizure": {
+      "precision": 0.45987654320987653,
+      "recall": 0.7602040816326531,
+      "f1-score": 0.573076923076923,
+      "support": 196.0
+    },
+    "accuracy": 0.9477401129943502,
+    "macro avg": {
+      "precision": 0.7239494846528486,
+      "recall": 0.8585077663839475,
+      "f1-score": 0.7726217112877093,
+      "support": 4248.0
+    },
+    "weighted avg": {
+      "precision": 0.9636541132319681,
+      "recall": 0.9477401129943502,
+      "f1-score": 0.953752761979986,
+      "support": 4248.0
+    }
+  },
+  "PR-AUC": 0.3675222358566794,
+  "params": {
+    "model__max_depth": 5,
+    "model__min_samples_leaf": 5
+  },
+  "threshold": 0.969707330415755,
+  "candidates": [
+    {
+      "params": {
+        "model__max_depth": 5,
+        "model__min_samples_leaf": 5
+      },
+      "threshold": 0.969707330415755,
+      "F1": 0.573076923076923,
+      "Recall": 0.7602040816326531,
+      "Precision": 0.45987654320987653
+    },
+    {
+      "params": {
+        "model__max_depth": 5,
+        "model__min_samples_leaf": 20
+      },
+      "threshold": 0.969707330415755,
+      "F1": 0.5330948121645797,
+      "Recall": 0.7602040816326531,
+      "Precision": 0.41046831955922863
+    },
+    {
+      "params": {
+        "model__max_depth": 10,
+        "model__min_samples_leaf": 5
+      },
+      "threshold": 0.9821813879028329,
+      "F1": 0.24237140366172624,
+      "Recall": 0.7091836734693877,
+      "Precision": 0.14616193480546794
+    },
+    {
+      "params": {
+        "model__max_depth": 10,
+        "model__min_samples_leaf": 20
+      },
+      "threshold": 0.9821813879028329,
+      "F1": 0.493006993006993,
+      "Recall": 0.7193877551020408,
+      "Precision": 0.375
+    },
+    {
+      "params": {
+        "model__max_depth": null,
+        "model__min_samples_leaf": 5
+      },
+      "threshold": 0.9090909090909091,
+      "F1": 0.4328767123287671,
+      "Recall": 0.4030612244897959,
+      "Precision": 0.46745562130177515
+    },
+    {
+      "params": {
+        "model__max_depth": null,
+        "model__min_samples_leaf": 20
+      },
+      "threshold": 0.8285714285714286,
+      "F1": 0.40096618357487923,
+      "Recall": 0.42346938775510207,
+      "Precision": 0.38073394495412843
+    }
+  ]
+}

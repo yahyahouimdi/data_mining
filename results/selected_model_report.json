@@ -1,0 +1,32 @@
+{
+  "selected_model": "lstm",
+  "selected_dataset": "window_1s_undersample",
+  "selection_rule": "highest validation F1, then validation recall",
+  "validation_F1": 0.8359941944847605,
+  "validation_Recall": 0.75,
+  "threshold": 0.9599252343177795,
+  "test": {
+    "Accuracy": 0.9747891104294478,
+    "Precision": 0.643510054844607,
+    "Recall": 0.8380952380952381,
+    "F1": 0.7280248190279214,
+    "PR-AUC": 0.7186114476992158
+  },
+  "window_confusion": {
+    "TP": 352,
+    "FP": 195,
+    "FN": 68,
+    "TN": 9817
+  },
+  "events": {
+    "true_events": 12,
+    "detected_events": 12,
+    "missed_events": 0,
+    "event_recall": 1.0,
+    "predicted_intervals": 35,
+    "false_alarm_intervals": 21,
+    "false_alarms_per_hour": 14.488353081739536,
+    "recorded_hours": 1.4494401041666667,
+    "mean_onset_delay_seconds": 0.3749999999836291
+  }
+}

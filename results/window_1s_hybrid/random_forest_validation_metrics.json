@@ -1,0 +1,91 @@
+{
+  "Accuracy": 0.9810565948935169,
+  "Precision": 0.8779661016949153,
+  "Recall": 0.6744791666666666,
+  "F1": 0.7628865979381443,
+  "ConfusionMatrix": [
+    [
+      8079,
+      36
+    ],
+    [
+      125,
+      259
+    ]
+  ],
+  "ClassificationReport": {
+    "normal": {
+      "precision": 0.984763529985373,
+      "recall": 0.9955637707948244,
+      "f1-score": 0.990134199399473,
+      "support": 8115.0
+    },
+    "seizure": {
+      "precision": 0.8779661016949153,
+      "recall": 0.6744791666666666,
+      "f1-score": 0.7628865979381443,
+      "support": 384.0
+    },
+    "accuracy": 0.9810565948935169,
+    "macro avg": {
+      "precision": 0.9313648158401442,
+      "recall": 0.8350214687307456,
+      "f1-score": 0.8765103986688086,
+      "support": 8499.0
+    },
+    "weighted avg": {
+      "precision": 0.9799382314251264,
+      "recall": 0.9810565948935169,
+      "f1-score": 0.9798667468802178,
+      "support": 8499.0
+    }
+  },
+  "PR-AUC": 0.8035186268338071,
+  "params": {
+    "model__max_depth": null,
+    "model__min_samples_leaf": 5
+  },
+  "threshold": 0.3693759768252565,
+  "candidates": [
+    {
+      "params": {
+        "model__max_depth": 12,
+        "model__min_samples_leaf": 1
+      },
+      "threshold": 0.36840383917526076,
+      "F1": 0.743988684582744,
+      "Recall": 0.6848958333333334,
+      "Precision": 0.8142414860681114
+    },
+    {
+      "params": {
+        "model__max_depth": 12,
+        "model__min_samples_leaf": 5
+      },
+      "threshold": 0.3661369171811722,
+      "F1": 0.7551299589603283,
+      "Recall": 0.71875,
+      "Precision": 0.7953890489913544
+    },
+    {
+      "params": {
+        "model__max_depth": null,
+        "model__min_samples_leaf": 1
+      },
+      "threshold": 0.19333333333333333,
+      "F1": 0.7428571428571429,
+      "Recall": 0.6770833333333334,
+      "Precision": 0.8227848101265823
+    },
+    {
+      "params": {
+        "model__max_depth": null,
+        "model__min_samples_leaf": 5
+      },
+      "threshold": 0.3693759768252565,
+      "F1": 0.7628865979381443,
+      "Recall": 0.6744791666666666,
+      "Precision": 0.8779661016949153
+    }
+  ]
+}
