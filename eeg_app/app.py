@@ -600,7 +600,7 @@ Les montages et les canaux sont decouverts depuis les en-tetes. Les signaux sont
 
 def pipeline_view() -> None:
     """Display the lab pipeline at the top of the application."""
-    st.markdown("""<div class='pipeline'><b>RAW EEG</b> &darr; <b>Annotations</b> &darr; <b>Class</b> (0 hors crise / 1 crise) &darr; <b>Fenêtres temporelles</b> (2 s, 50%) &darr; <b>Caractéristiques temporelles</b> &darr; <b>Dataset ML</b> &darr; <b>Classification future</b></div>""", unsafe_allow_html=True)
+    st.markdown("""<div class='pipeline'><b>RAW EEG</b> &darr; <b>Annotations</b> &darr; <b>Class</b> (0 hors crise / 1 crise) &darr; <b>Fenêtres temporelles</b> (2 s, 50%) &darr; <b>Caractéristiques temporelles et fréquentielles</b> &darr; <b>Dataset ML</b> &darr; <b>Classification</b> &darr; <b>Reconstruction des crises</b></div>""", unsafe_allow_html=True)
 
 
 def main() -> None:
