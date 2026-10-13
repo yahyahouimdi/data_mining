@@ -3,6 +3,10 @@
 *.mat
 *.csv
 
+#models
+*.pt
+*.joblib
+
 # Virtual environment
 .venv/
 
