@@ -7,6 +7,9 @@
 *.pt
 *.joblib
 
+# Trained machine learning models
+models/**/*.joblib
+
 # Virtual environment
 .venv/
 
